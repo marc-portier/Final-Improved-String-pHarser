@@ -162,17 +162,12 @@ def parse():
   From the documentation we can conclude that a .txt (or a .ref file) with one citation per line is suitable for input
   """
   
-  # To ensure no duplicate filenames, use headers to create a filename
-  # This will give issues if two people upload two files with the exact same size on the exact same second
-  # This should do the trick for now, but it can be changed later on to a more heavyweight solution if need be
-  input_filename = temporary_folder + request.headers.get("content-length") + time.strftime("%Y%m%d%H%M%S") + "." + input_type
+  input_filename = random_temp_filename(request, extension=input_type)
   input_filenames = [input_filename]  # List of filenames to clean later
  
   # If a string was directly given, save it to a file
   if not file_upload:
-    file_from_string = open(input_filename, "w", encoding="utf-8")
-    file_from_string.write(request.get_data().decode("utf-8"))
-    file_from_string.close()
+    utf8_data_to_file(data=request.get_data(), filename=input_filename)
   else:
     # If a file is getting uploaded, save it as well
     request.files['file'].save(input_filename)
@@ -222,10 +217,56 @@ def parse():
     "data": json.loads(data)
   }
 
+def random_temp_filename(request, extension):
+  # To ensure no duplicate filenames, use headers to create a filename
+  # This will give issues if two people upload two files with the exact same size on the exact same second
+  # This should do the trick for now, but it can be changed later on to a more heavyweight solution if need be
+  return temporary_folder + request.headers.get("content-length") + time.strftime("%Y%m%d%H%M%S") + "." + extension
+
+def utf8_data_to_file(data, filename):
+  file_from_string = open(filename, "w", encoding="utf-8")
+  file_from_string.write(data.decode("utf-8"))
+  file_from_string.close()
+
 def remove_files(files):
   for file in files:
     os.remove(file)
   print("Removed")
+
+
+@api.route('/train', methods=['POST'])
+def train():
+  content_type = request.headers.get("content-type")
+
+  # XML -> train_and_check
+  if "xml" in content_type:
+    input_type = "xml"
+    sh = model_folder_path.rglob("train_and_check.sh")
+  # CSV -> train_year_models
+  if "csv" in content_type:
+    input_type = "csv"
+    sh = model_folder_path.rglob("train_year_models.sh")
+  
+  print(sh)
+
+  input_filename = random_temp_filename(request, input_type)
+
+  data = request.get_data()
+  if data:
+    print("Data")
+    utf8_data_to_file(data=data, filename=input_filename)
+  else:
+    print("No data")
+  
+  
+  
+
+
+  
+
+
+  
+  subprocess.check_output(sh, shell=True),
 
 
 def header_boolean(header_value, default):
