@@ -155,16 +155,31 @@ For the form:
     ...
 
 """
+
+# https://docs.python.org/3/library/subprocess.html#replacing-shell-pipeline
+def safe_subprocess(command, params):
+  p1 = subprocess.Popen([command], stdout=PIPE)
+  p2 = subprocess.Popen(params, stdin=p1.stdout, stdout=subprocess.PIPE)
+  p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
+  output = p2.communicate()[0]
+  return output
+
 CITATION_STRING_CONST = "citationstring"
+
+@api.route('/retrain', methods=['POST'])
+def retrain():
+  if request.form and CITATION_STRING_CONST not in request.form:
+    # TODO: retrain model here
+    return index_success(200, "Successfully updated model. Thank you for your contribution")
 
 @api.route('/parse', methods=['POST'])
 def parse():
   # Step 1: figure out what kind of input is given
   content_type = request.headers.get("content-type")
 
-  if "multipart/form-data" in content_type:
-    input_type = "form"
-  elif "text/plain" in content_type:
+  #if "multipart/form-data" in content_type:
+    #input_type = 
+  if "text/plain" in content_type:
     input_type = "txt"
   elif "csv" in content_type:
     input_type = "csv"
@@ -248,10 +263,6 @@ def parse():
 
   remove_in_background(input_filenames)
 
-  if request.form and CITATION_STRING_CONST not in request.form:
-    # TODO: retrain model here
-    return index_success(200, "Successfully updated model. Thank you for your contribution")
-
   if len(data) <= 0:
       return index_error(422, "No data found in input")
 
@@ -334,9 +345,33 @@ def process_file(filepath, model_name=False):
   # rglob may return WindowsPath, so convert to str
   model = str(model)
 
+  command_list = ["anystyle", "-P", model, "-f", "json", "--stdout", "parse", filepath]
+  print(command_list)
+
+  """
+  command_str = f'/bin/sh /usr/local/bundle/bin/anystyle -P "/app/{model}" -f json --stdout parse "/app/{filepath}"'
+  print(command_str)
+  output = subprocess.check_output(, 
+    stdin=subprocess.PIPE, 
+    stderr=subprocess.PIPE,
+    encoding="utf-8-sig"
+    )
+  """
+  #with subprocess.Popen(command_list, stdout=subprocess.PIPE) as proc:
+  #  output = proc.stdout.read()
+  #command = subprocess.Popen([command_str], stdout=subprocess.PIPE)
+  #output = command.communicate()[0]
+  #output = safe_subprocess("anystyle", ['-P "{model}" -f json --stdout parse "{filepath}"'])
+  #output = subprocess.check_output(command_list)
+
+  print('anystyle -P "' + model + '" -f json --stdout parse "' + filepath + '"')
+  output = subprocess.check_output('anystyle -P "' + model + '" -f json --stdout parse "' + filepath + '"', shell=True)
+
   return [
     # Put quotes around the parameters in case of space
-    subprocess.check_output('anystyle -P "' + model + '" -f json --stdout parse "' + filepath + '"', shell=True),
+    #https://stackoverflow.com/a/9506481
+    #output,
+    output, 
     os.path.basename(model)
   ]
 
@@ -423,6 +458,7 @@ def train():
     shutil.copy2(model_path + ".bak", model_path)
 
     remove_in_background(input_filenames)
+    print(e)
     return index_error(500, e)
 
   
